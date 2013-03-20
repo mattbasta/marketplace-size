@@ -50,8 +50,8 @@ def get_recent_data(domain):
         # ~Two weeks of data.
         data = list(Entry.all().filter('domain =', urls[domain])
                                .order('-time')
-                               .run(limit=600))
-        memcache.add(key, pickle.dumps(data), time=1800)
+                               .run(limit=336))
+        memcache.add(key, pickle.dumps(data), time=3600)
         return data
 
 
@@ -69,6 +69,19 @@ class MainHandler(BaseHandler):
 
 
 class CheckHandler(webapp2.RequestHandler):
+
+    def _do(self):
+        memcache.set('last_ping', time.time())
+        self.response.write('Ping saved: %s' % memcache.get('last_ping'))
+
+    def get(self):
+        self._do();
+
+    def post(self):
+        self._do();
+
+
+class ProcessHandler(webapp2.RequestHandler):
 
     def _test_url(self, url):
         self.response.write('%s<br>' % url)
@@ -114,20 +127,37 @@ class CheckHandler(webapp2.RequestHandler):
         self.response.write('Size: %d<br>' % size)
         self.response.write('Assets Size: %d<br>' % asset_size)
 
-    def get(self):
+    def _do(self):
         now = time.time()
+
+        last_ping = memcache.get('last_ping')
+        if last_ping == '-1':
+            self.response.write('No ping to process.')
+            return
+        elif last_ping > now - 60 * 5:
+            self.response.write('Last ping was too recent.')
+            return
+
         last_test = memcache.get('last_cron')
-        if last_test is not None and now - int(last_test) < 60 * 15:
+        if last_test is not None and now - int(last_test) < 60 * 5:
             self.response.write('Last cron was too recent.')
             return
 
-        memcache.add('last_cron', now)
+        memcache.set('last_cron', now)
+        memcache.set('last_ping', '-1')
 
         for url in urls.values():
             self._test_url(url)
+
+    def get(self):
+        self._do();
+
+    def post(self):
+        self._do();
 
 
 app = webapp2.WSGIApplication([
     ('/', MainHandler),
     ('/tasks/check', CheckHandler),
+    ('/tasks/process', ProcessHandler),
 ], debug=True)

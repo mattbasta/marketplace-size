@@ -1,4 +1,4 @@
 cron:
 - description: check marketplace size
-  url: /tasks/check
-  schedule: every 30 minutes
+  url: /tasks/process
+  schedule: every 3 minutes
